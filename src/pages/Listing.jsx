@@ -1,5 +1,5 @@
 import {useState, useEffect} from 'react'
-import {Link, NavigationType, useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import {MapContainer, Marker, Popup, TileLayer} from 'react-leaflet'
 import SwiperCore, {Navigation, Pagination, Scrollbar, A11y} from 'swiper'
 import {Swiper, SwiperSlide} from 'swiper/react'
@@ -70,11 +70,11 @@ function Listing() {
             <p className="listingName">
                 {listing.name} - 
                 ₺ {listing.offer 
-                        ? listing.discountedPrice .toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                        ? listing.discountedPrice.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
                         : listing.regularPrice.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             </p>
             <p className="listingLocation">{listing.location}</p>
-            <p className="listingType">For {listing.type == 'rent' ? 'Rent' : 'Sale'}</p>
+            <p className="listingType">For {listing.type === 'rent' ? 'Rent' : 'Sale'}</p>
             {listing.offer && (
                 <p className="discountPrice">
                     ₺ {listing.regularPrice - listing.discountedPrice} discount
