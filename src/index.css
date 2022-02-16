@@ -856,7 +856,7 @@ button {
   position: fixed;
   width: 70%;
   height: 50px;
-  bottom: 0;
+  bottom: 15vh;
 }
 .chatControls textarea{
   width: 90%;

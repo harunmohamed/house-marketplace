@@ -1,5 +1,13 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  where,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { db } from "../firebase.config";
 import { toast } from "react-toastify";
@@ -9,7 +17,7 @@ const User = (props) => {
   const { user, onClick } = props;
 
   return (
-    <div onClick={() => onClick(user)} className="displayName">
+    <div onClick={() => onClick(user.name)} className="displayName">
       <div className="displayPic">
         <img
           src="https://i.pinimg.com/originals/be/ac/96/beac96b8e13d2198fd4bb1d5ef56cdcf.jpg"
@@ -24,9 +32,7 @@ const User = (props) => {
           margin: "0 10px",
         }}
       >
-        <span style={{ fontWeight: 500 }}>
-          {user.firstName} {user.lastName}
-        </span>
+        <span style={{ fontWeight: 500 }}>{user.name}</span>
         <span
           className={user.isOnline ? `onlineStatus` : `onlineStatus off`}
         ></span>
@@ -37,6 +43,7 @@ const User = (props) => {
 
 const Chat = () => {
   const auth = getAuth();
+  const currentUser = auth.currentUser?.displayName;
   const [users, setUsers] = useState(null);
   const [loading, setLoading] = useState(true);
   const [chatStarted, setChatStarted] = useState(false);
@@ -49,10 +56,10 @@ const Chat = () => {
     const fetchUsers = async () => {
       try {
         // Get reference
-        const listingsRef = collection(db, "users");
+        const usersRef = collection(db, "users");
 
         // Create a query
-        const q = query(listingsRef, orderBy("timestamp", "desc"));
+        const q = query(usersRef, orderBy("name", "asc"));
 
         // Execute query
         const querySnap = await getDocs(q);
@@ -60,62 +67,67 @@ const Chat = () => {
         const users = [];
 
         querySnap.forEach((doc) => {
-          return users.push({
-            id: doc.id,
-            data: doc.data(),
-          });
+          if (doc.data().name !== currentUser) {
+            return users.push(doc.data());
+          }
         });
 
         setUsers(users);
         setLoading(false);
       } catch (error) {
-        toast.error("Could not fetch listings");
+        toast.error("Could not fetch your chat users");
       }
     };
 
     fetchUsers();
-  }, []);
+  }, [currentUser]);
 
-  const initChat = (user) => {
-    setChatStarted(true);
-    setChatUser(`${user.firstName} ${user.lastName}`);
-    setUserUid(user.uid);
+  const getConversations = async (user) => {
+    const convRef = collection(db, "conversations");
 
-    db.collection("conversations")
-      .where("user_uid_1", "in", [user.uid_1, user.uid_2])
-      .orderBy("createdAt", "asc")
-      .onSnapshot((querySnapshot) => {
-        const conversations = [];
+    const q = query(convRef, where("from", "in", [currentUser, user]));
 
-        querySnapshot.forEach((doc) => {
-          if (
-            (doc.data().user_uid_1 === user.uid_1 &&
-              doc.data().user_uid_2 === user.uid_2) ||
-            (doc.data().user_uid_1 === user.uid_2 &&
-              doc.data().user_uid_2 === user.uid_1)
-          ) {
-            conversations.push(doc.data());
-          }
+    const querySnap = await getDocs(q);
 
-          setConversations(conversations);
-        });
-      });
+    const conversations = [];
+
+    querySnap.forEach((doc) => {
+      if (
+        (doc.data().from === currentUser && doc.data().to === user) ||
+        (doc.data().from === user && doc.data().to === currentUser)
+      ) {
+        conversations.push(doc.data());
+      }
+    });
+
+    setConversations(conversations);
   };
 
-  const submitMessage = (e) => {
+  const initChat = async (user) => {
+    setChatStarted(true);
+    setChatUser(`${user}`);
+    setUserUid(user);
+    getConversations(user);
+  };
+
+  const submitMessage = async (e) => {
+    setLoading(true);
     const msgObj = {
-      user_uid_1: auth.uid,
-      user_uid_2: userUid,
+      from: currentUser,
+      to: userUid,
       message,
+      timestamp: serverTimestamp(),
     };
 
     if (message !== "") {
-      db.collection("conversations").add({
-        ...msgObj,
-        isView: false,
-        createdAt: new Date(),
-      });
+      const convRef = await addDoc(collection(db, "conversations"), msgObj);
+      console.log("ref", convRef);
+
+      toast.success("Message sent");
+      getConversations(userUid);
     }
+    setLoading(false);
+    setMessage("");
   };
 
   if (loading) {
@@ -126,8 +138,14 @@ const Chat = () => {
     <section className="container">
       <div className="listOfUsers">
         {users.length > 0
-          ? users.map((user) => {
-              return <User onClick={initChat} key={user.uid} user={user} />;
+          ? users.map((user, index) => {
+              return (
+                <User
+                  onClick={initChat}
+                  key={`user-container-${index + 1}`}
+                  user={user}
+                />
+              );
             })
           : null}
       </div>
@@ -136,10 +154,11 @@ const Chat = () => {
         <div className="chatHeader">{chatStarted ? chatUser : ""}</div>
         <div className="messageSections">
           {chatStarted
-            ? conversations.map((con) => (
+            ? conversations.map((con, index) => (
                 <div
+                  key={index}
                   style={{
-                    textAlign: con.user_uid_1 === auth.uid ? "right" : "left",
+                    textAlign: con.from === currentUser ? "right" : "left",
                   }}
                 >
                   <p className="messageStyle">{con.message}</p>
